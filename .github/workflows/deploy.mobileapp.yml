@@ -24,7 +24,7 @@ jobs:
       environment: ${{ inputs.environment }}
 
   deploy_android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-16-cores
     needs: config
     environment: ${{ needs.config.outputs.ENV }}
     permissions:
@@ -114,27 +114,27 @@ jobs:
           ruby-version: '3.0'
           bundler-cache: true
 
-      # - name: Config app environments
-      #   working-directory: flutter_app
-      #   run: |
-      #     GOOGLE_APPLICATION_CREDENTIALS=${HOME}/ci_viewer_sa_credentials.json
-      #     echo "${{ secrets.CI_VIEWER_SA_BASE64 }}" | base64 -d > $GOOGLE_APPLICATION_CREDENTIALS
-      #     ENV=${{ needs.config.outputs.ENV }} GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS ANDROID_PACKAGE_NAME=${{ steps.config.outputs.ANDROID_PACKAGE_NAME }} IOS_BUNDLE_ID="" make config
+      - name: Config app environments
+        working-directory: flutter_app
+        run: |
+          GOOGLE_APPLICATION_CREDENTIALS=${HOME}/ci_viewer_sa_credentials.json
+          echo "${{ secrets.CI_VIEWER_SA_BASE64 }}" | base64 -d > $GOOGLE_APPLICATION_CREDENTIALS
+          ENV=${{ needs.config.outputs.ENV }} GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS ANDROID_PACKAGE_NAME=${{ steps.config.outputs.ANDROID_PACKAGE_NAME }} IOS_BUNDLE_ID="" make config
 
-      #     echo '<debug>'
-      #     cat .env.android
-      #     echo '</debug>'
+          echo '<debug>'
+          cat .env.android
+          echo '</debug>'
 
-      #     sed -i "s/^version: .*/version: ${{ env.MOBILEAPP_VERSION }}/" pubspec.yaml
+          sed -i "s/^version: .*/version: ${{ env.MOBILEAPP_VERSION }}/" pubspec.yaml
 
-      #     echo '<debug>'
-      #     cat pubspec.yaml
-      #     echo '</debug>'
+          echo '<debug>'
+          cat pubspec.yaml
+          echo '</debug>'
 
       - name: Build
         working-directory: flutter_app
         run: |
-          echo ${ANDROID_KEYSTORE_FILE_BASE64} | base64 -d > ${HOME}/keystore.jks
+          echo ${{ secrets.ANDROID_KEYSTORE_FILE_BASE64 }} | base64 -d > ${HOME}/keystore.jks
 
           cat <<EOF > android/key.properties
           storePassword=${ANDROID_KEYSTORE_PASSWORD}
