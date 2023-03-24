@@ -12,9 +12,17 @@ lint:
 	flutter pub get
 	flutter analyze --write=linter-report.txt
 
+
 config:
 	cd scripts && pip install -r requirements.txt
 	cd scripts && python config.py --env=$(ENV) \
 		--google_application_credentials=$(GOOGLE_APPLICATION_CREDENTIALS) \
 		--android_package_name=$(ANDROID_PACKAGE_NAME) \
 		--ios_bundle_id=$(IOS_BUNDLE_ID)
+
+
+.PHONY: buildandroid
+buildandroid:
+	flutter clean
+	flutter pub get
+	flutter build appbundle --release --no-sound-null-safety

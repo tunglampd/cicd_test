@@ -134,7 +134,7 @@ jobs:
       - name: Build
         working-directory: flutter_app
         run: |
-          echo ${{ secrets.ANDROID_KEYSTORE_FILE_BASE64 }} | base64 -d > ${HOME}/keystore.jks
+          echo ${ANDROID_KEYSTORE_FILE_BASE64} | base64 -d > ${HOME}/keystore.jks
 
           cat <<EOF > android/key.properties
           storePassword=${ANDROID_KEYSTORE_PASSWORD}
