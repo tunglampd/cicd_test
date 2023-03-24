@@ -41,7 +41,7 @@ jobs:
           sudo apt-get install lcov
 
       - name: Run test
-        working-directory: flutter
+        working-directory: flutter_app
         run: |
           make test
           genhtml coverage/lcov.info -o coverage/html
