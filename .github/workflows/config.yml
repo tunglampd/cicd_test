@@ -70,10 +70,10 @@ jobs:
         run: |
           ./load.sh "${{ env.ENV }}" $GITHUB_ENV
 
-      - name: Config Google Play app signing sha hash
-        working-directory: .github/workflows/configs
-        run: |
-          ./config_sha.sh
+      # - name: Config Google Play app signing sha hash
+      #   working-directory: .github/workflows/configs
+      #   run: |
+      #     ./config_sha.sh
 
       - name: Get changed files related to mobileapp
         id: mobileapp_files_changed
@@ -82,7 +82,6 @@ jobs:
           files: |
             environments/**
             .github/workflows/config.yml
-            infrastructure/**
             .github/workflows/deploy.mobileapp.yml
             flutter_app/**
           fetch-depth: 2
