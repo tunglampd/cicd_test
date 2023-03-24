@@ -1,0 +1,93 @@
+name: config
+
+on:
+  workflow_call:
+    inputs:
+      github-ref:
+        required: false
+        type: string
+      github-base-ref:
+        required: false
+        type: string
+      environment:
+        required: false
+        type: string
+        default: ''
+    outputs:
+      ENV:
+        value: ${{ jobs.config.outputs.ENV }}
+      ANDROID_APP_SHA1_HASHES_TF:
+        value: ${{ jobs.config.outputs.ANDROID_APP_SHA1_HASHES_TF }}
+      ANDROID_APP_SHA256_HASHES_TF:
+        value: ${{ jobs.config.outputs.ANDROID_APP_SHA256_HASHES_TF }}
+      ANDROID_APP_SHA256_HASHES_GKE:
+        value: ${{ jobs.config.outputs.ANDROID_APP_SHA256_HASHES_GKE }}
+      mobileapp_files_changed:
+        value: ${{ jobs.config.outputs.mobileapp_files_changed }}
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      ENV: ${{ env.ENV }}
+      ANDROID_APP_SHA1_HASHES_TF: ${{ env.ANDROID_APP_SHA1_HASHES_TF }}
+      ANDROID_APP_SHA256_HASHES_TF: ${{ env.ANDROID_APP_SHA256_HASHES_TF }}
+      ANDROID_APP_SHA256_HASHES_GKE: ${{ env.ANDROID_APP_SHA256_HASHES_GKE }}
+      api_files_changed: ${{ steps.api_files_changed.outputs.any_changed }}
+      mobileapp_files_changed: ${{ steps.mobileapp_files_changed.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check ref
+        if: inputs.environment == '' && inputs.github-ref == '' && inputs.github-base-ref == ''
+        run: |
+          echo "Must have at least one value of environment, github-ref, github-base-ref"
+          exit 1
+
+      - name: Set ENV=${{ inputs.environment }}
+        if: inputs.environment != ''
+        run: |
+          echo "ENV=${{ inputs.environment }}" >> $GITHUB_ENV
+
+      - name: Get target ref
+        if: inputs.environment == '' && inputs.github-ref != ''
+        run: |
+          REF="${{ inputs.github-base-ref || inputs.github-ref }}"
+          echo "TARGET_REF=$(echo "$REF" | sed 's/refs\/heads\///g')" >> $GITHUB_ENV
+
+      - name: Set ENV=production
+        if: inputs.environment == '' && (env.TARGET_REF == 'main' || env.TARGET_REF == 'release/1.0.0')
+        run: |
+          echo "ENV=production" >> $GITHUB_ENV
+
+      - name: Set ENV=development
+        if: inputs.environment == '' && (env.TARGET_REF == 'develop' || env.TARGET_REF == 'release/1.0.0-develop')
+        run: |
+          echo "ENV=development" >> $GITHUB_ENV
+
+      - name: Config environments
+        working-directory: environments
+        run: |
+          ./load.sh "${{ env.ENV }}" $GITHUB_ENV
+
+      - name: Config Google Play app signing sha hash
+        working-directory: .github/workflows/configs
+        run: |
+          ./config_sha.sh
+
+      - name: Get changed files related to mobileapp
+        id: mobileapp_files_changed
+        uses: tj-actions/changed-files@v35
+        with:
+          files: |
+            environments/**
+            .github/workflows/config.yml
+            infrastructure/**
+            .github/workflows/deploy.mobileapp.yml
+            flutter_app/**
+          fetch-depth: 2
+
+      - name: Debug
+        run: |
+          echo "${{ steps.api_files_changed.outputs.any_changed }}"
+          echo "${{ steps.mobileapp_files_changed.outputs.any_changed }}"
