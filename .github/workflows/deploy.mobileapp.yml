@@ -1,0 +1,185 @@
+name: deploy.mobileapp
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment'
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+  workflow_call:
+    inputs:
+      mobileapp_build_number:
+        required: false
+        type: string
+
+jobs:
+  config:
+    uses: ./.github/workflows/config.yml
+    with:
+      github-ref: ${{ github.ref }}
+      environment: ${{ inputs.environment }}
+
+  deploy_android:
+    runs-on: ubuntu-latest-16-cores
+    needs: config
+    environment: ${{ needs.config.outputs.ENV }}
+    permissions:
+      contents: 'write'
+      id-token: 'write'
+    steps:
+      - uses: actions/checkout@v3
+        if: inputs.mobileapp_build_number != ''
+
+      - uses: actions/checkout@v3
+        if: inputs.mobileapp_build_number == ''
+        with:
+          fetch-depth: 0
+
+      - name: Set mobileapp build number
+        if: inputs.mobileapp_build_number == ''
+        working-directory: flutter_app
+        run: |
+          LATEST_MOBILEAPP_BUILD_NUMBER_TAG=$(git ls-remote --tags origin "mobileapp-b*" | awk '{print $2}' | sort -V | tail -n 1)
+          MOBILEAPP_BUILD_NUMBER=$(($(echo "$LATEST_MOBILEAPP_BUILD_NUMBER_TAG" | sed "s/^refs\/tags\/mobileapp-b//") + 1))
+
+          echo "MOBILEAPP_BUILD_NUMBER=$MOBILEAPP_BUILD_NUMBER" >> $GITHUB_ENV
+
+      - name: Push mobileapp build number tag
+        if: inputs.mobileapp_build_number == ''
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/mobileapp-b${{ env.MOBILEAPP_BUILD_NUMBER }}',
+              sha: context.sha
+            })
+
+      - name: Set mobileapp tag prefix
+        working-directory: flutter_app
+        run: |
+          MOBILEAPP_TAG_PREFIX=mobileapp-${{ needs.config.outputs.ENV }}-v
+          if [ "${{ needs.config.outputs.ENV }}" = "production" ]; then
+            MOBILEAPP_TAG_PREFIX=mobileapp-v
+          fi
+          echo "MOBILEAPP_TAG_PREFIX=$MOBILEAPP_TAG_PREFIX" >> $GITHUB_ENV
+          
+          MOBILEAPP_VERSION_NAME=$(grep '^version: ' pubspec.yaml | cut -d' ' -f2)
+          MOBILEAPP_VERSION=$(echo "$MOBILEAPP_VERSION_NAME+$MOBILEAPP_BUILD_NUMBER")
+          echo "MOBILEAPP_VERSION=$MOBILEAPP_VERSION" >> $GITHUB_ENV
+        env:
+          MOBILEAPP_BUILD_NUMBER: ${{ inputs.mobileapp_build_number || env.MOBILEAPP_BUILD_NUMBER }}
+
+      - name: Push mobileapp version tag
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ env.MOBILEAPP_TAG_PREFIX }}${{ env.MOBILEAPP_VERSION }}',
+              sha: context.sha
+            })
+
+      - name: Config environments
+        id: config
+        working-directory: environments
+        run: |
+          ./load.sh "${{ needs.config.outputs.ENV }}" $GITHUB_OUTPUT
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: ${{ steps.config.outputs.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.config.outputs.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          cache-key: flutter-${{ steps.config.outputs.FLUTTER_VERSION }}
+          cache-path: ${{ runner.tool_cache }}/flutter-${{ steps.config.outputs.FLUTTER_VERSION }}
+          architecture: x64
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Config app environments
+        working-directory: flutter_app
+        run: |
+          GOOGLE_APPLICATION_CREDENTIALS=${HOME}/ci_viewer_sa_credentials.json
+          echo "${{ secrets.CI_VIEWER_SA_BASE64 }}" | base64 -d > $GOOGLE_APPLICATION_CREDENTIALS
+          ENV=${{ needs.config.outputs.ENV }} GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS ANDROID_PACKAGE_NAME=${{ steps.config.outputs.ANDROID_PACKAGE_NAME }} IOS_BUNDLE_ID="" make config
+
+          echo '<debug>'
+          cat .env.android
+          echo '</debug>'
+
+          sed -i "s/^version: .*/version: ${{ env.MOBILEAPP_VERSION }}/" pubspec.yaml
+
+          echo '<debug>'
+          cat pubspec.yaml
+          echo '</debug>'
+
+      - name: Build
+        working-directory: flutter_app
+        run: |
+          echo ${ANDROID_KEYSTORE_FILE_BASE64} | base64 -d > ${HOME}/keystore.jks
+
+          cat <<EOF > android/key.properties
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyAlias=upload
+          storeFile=${HOME}/keystore.jks
+          EOF
+
+          echo '<debug>'
+          cat android/key.properties
+          echo '</debug>'
+
+          keytool -list -v -keystore ${HOME}/keystore.jks -storepass ${ANDROID_KEYSTORE_PASSWORD}
+
+          make buildandroid
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_FILE_BASE64: ${{ secrets.ANDROID_KEYSTORE_FILE_BASE64 }}
+
+      - name: Prepare for deploy
+        working-directory: flutter_app/android
+        run: |
+          GOOGLE_APPLICATION_CREDENTIALS=${HOME}/google_play_sa_credentials.json
+          echo "${{ secrets.GOOGLE_PLAY_SA_BASE64 }}" | base64 -d > $GOOGLE_APPLICATION_CREDENTIALS
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS" >> $GITHUB_ENV
+
+          bundle install
+
+      - name: Deploy
+        working-directory: flutter_app/android
+        run: |
+          bundle exec fastlane deploy --verbose
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+          ANDROID_PACKAGE_NAME: ${{ steps.config.outputs.ANDROID_PACKAGE_NAME }}
+          GOOGLE_PLAY_RELEASE_STATUS: completed # release_status in https://docs.fastlane.tools/actions/upload_to_play_store/
+          GOOGLE_PLAY_TRACK: internal # https://developers.google.com/android-publisher/tracks
+
+      - name: Promote
+        if: needs.config.outputs.ENV == 'production'
+        working-directory: flutter_app/android
+        run: |
+          bundle exec fastlane promote --verbose
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ env.GOOGLE_APPLICATION_CREDENTIALS }}
+          ANDROID_PACKAGE_NAME: ${{ steps.config.outputs.ANDROID_PACKAGE_NAME }}
+          GOOGLE_PLAY_TRACK: internal # https://developers.google.com/android-publisher/tracks
+          GOOGLE_PLAY_TRACK_PROMOTE_TO: beta # https://developers.google.com/android-publisher/tracks
