@@ -80,7 +80,7 @@ jobs:
 
       - name: Run lint
         id: lint
-        working-directory: flutter
+        working-directory: flutter_app
         run: |
           make lint
 
@@ -89,4 +89,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: linter-report
-          path: flutter/linter-report.txt
+          path: flutter_app/linter-report.txt
