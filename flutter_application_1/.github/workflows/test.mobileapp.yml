@@ -1,0 +1,92 @@
+name: test.mobileapp
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/test.mobileapp.yml'
+      - '**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Config environments
+        id: config
+        working-directory: environments
+        run: |
+          ./load.sh "" $GITHUB_OUTPUT
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.config.outputs.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          cache-key: flutter-${{ steps.config.outputs.FLUTTER_VERSION }}
+          cache-path: ${{ runner.tool_cache }}/flutter-${{ steps.config.outputs.FLUTTER_VERSION }}
+
+      - name: Setup lcov for genhtml
+        run: |
+          sudo apt-get install lcov
+
+      - name: Run test
+        working-directory: flutter
+        run: |
+          make test
+          genhtml coverage/lcov.info -o coverage/html
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: flutter/coverage/html
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Config environments
+        id: config
+        working-directory: environments
+        run: |
+          ./load.sh "" $GITHUB_OUTPUT
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.config.outputs.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+          cache-key: flutter-${{ steps.config.outputs.FLUTTER_VERSION }}
+          cache-path: ${{ runner.tool_cache }}/flutter-${{ steps.config.outputs.FLUTTER_VERSION }}
+
+      - name: Run lint
+        id: lint
+        working-directory: flutter
+        run: |
+          make lint
+
+      - name: Upload linter report
+        if: failure() && steps.lint.outcome == 'failure'
+        uses: actions/upload-artifact@v3
+        with:
+          name: linter-report
+          path: flutter/linter-report.txt
