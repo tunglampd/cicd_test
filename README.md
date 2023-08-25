@@ -30,7 +30,8 @@ sequenceDiagram
     Note over Controller, REPO: Use
     Note over RepoImpl, REPO: Implement
 
-    RepoImpl->>SV: 
+    RepoImpl->>RepoImpl: get Csrf token if needed
+    RepoImpl->>SV: send to api service
     SV->>BE: request to server
     BE->>SV: receive from server
     SV->>SV: deserialize response
