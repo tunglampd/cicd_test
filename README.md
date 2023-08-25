@@ -25,7 +25,7 @@ sequenceDiagram
     Controller -->> UI: if error, notify
     end
     
-    Controller->>REPO: send request to controller
+    Controller->>REPO: send request to domain
 
     Note over Controller, REPO: Use
     Note over RepoImpl, REPO: Implement
