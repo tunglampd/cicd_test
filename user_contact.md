@@ -1,6 +1,7 @@
 ```mermaid
 sequenceDiagram    
     participant Webapp as SPA/ Native App
+    participant md as Middleware
     participant Server as API Server 
     participant DB as Database
     participant AS as AWS SES
@@ -8,15 +9,18 @@ sequenceDiagram
 
     Note over Webapp, AE: user contact
 
-    Webapp->>Server: [GET] /master/contact-items
-    Server->>DB: request data
-    DB->>DB: query data
-    DB->>Server: return data
-    Server->>Webapp: return inquiry list
-
     Webapp->>Webapp: create request_body UserContact(name, email, phone, note, inquiries)
-    Webapp->>Webapp: get api_key
-    Webapp->>Server: [POST] /users/{id}/contact (body: request_body, header with api_key)
+    Webapp->>Webapp: get API-KEY
+    Webapp->>md: [POST] /users/{id}/contact (body: request_body) with API-KEY in header
+
+    md->>md: Authentication with API-KEY from header
+    alt authen fail
+    md->>Webapp: return error
+    else authen success
+    md->>Server: [POST] /users/{id}/contact (body: request_body)
+    end
+
+
     Server->>DB: request insert
     DB->>DB: insert data
     alt insert fail
