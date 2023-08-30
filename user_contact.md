@@ -20,13 +20,13 @@ sequenceDiagram
     Server->>DB: request insert
     DB->>DB: insert data
     alt insert fail
-    DB->> Server: insert success or not
+    DB->> Server: insert fail
     Server->>Webapp: return error
     else success
-
+    DB->> Server: insert success
     Server->>+ AS: request send mail
-    end
     AS->>AE: send contact form to admin email
     AS->>- Server: return 
     Server->> Webapp: return response
+    end
 ```
