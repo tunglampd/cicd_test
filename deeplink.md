@@ -19,13 +19,8 @@ sequenceDiagram
     alt false 
     MobileApp->>User: direct to download link
     else true
-    MobileApp->>MobileApp: verify app (correct info)
-    alt false
-    MobileApp->>User: direct to download link
-    else true
     MobileApp->>MobileApp: open app, handle data, load webview
     MobileApp->>User: display to User
-    end
     end
 
 
