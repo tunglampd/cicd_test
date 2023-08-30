@@ -10,11 +10,7 @@ sequenceDiagram
     
     Note over Webapp, AE: app contact
 
-    Webapp->>Server: [GET] /master/contact-items
-    Server->>DB: request data
-    DB->>DB: query data
-    DB->>Server: return data
-    Server->>Webapp: return inquiry list
+
     
     Webapp->>Webapp: create request_body Contact(name, email, phone, note, inquiries)
     Webapp->>Server: [POST] /contact (body: request_body)
@@ -23,7 +19,7 @@ sequenceDiagram
     alt insert fail
     DB->>Server: insert fail
     Server->>Webapp: return error
-    else success
+    else insert success
     DB->> Server: insert success
     Server->>+AS: request send mail
     AS->>AE: send contact form to admin email
