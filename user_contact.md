@@ -1,8 +1,10 @@
 ```mermaid
 sequenceDiagram    
     participant Webapp as SPA/ Native App
+    box Server
     participant md as Middleware
     participant Server as API Server 
+    end
     participant DB as Database
     participant AS as AWS SES
     participant AE as Admin Email
